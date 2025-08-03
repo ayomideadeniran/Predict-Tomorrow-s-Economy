@@ -2,12 +2,14 @@
 mod PredictTomorrowsEconomy {
     use starknet::ContractAddress;
     use starknet::get_caller_address;
+    use starknet::storage::Map;
+    use starknet::event::EventEmitter;
 
     #[storage]
     struct Storage {
-        oracle: ContractAddress,
+        owner: ContractAddress,
         result: u8, // 0: Not set, 1: Up, 2: Down
-        predictions: LegacyMap<ContractAddress, u8>,
+        predictions: Map<ContractAddress, u8>,
         total_up_stake: u256,
         total_down_stake: u256,
     }
@@ -34,8 +36,8 @@ mod PredictTomorrowsEconomy {
     #[starknet::interface]
     trait IPredictTomorrowsEconomy<TContractState> {
         fn predict(ref self: TContractState, prediction: u8, amount: u256);
-        fn determine_result(ref self: TContractState);
-        fn get_oracle(self: @TContractState) -> ContractAddress;
+        fn determine_result(ref self: TContractState, result: u8);
+        fn get_owner(self: @TContractState) -> ContractAddress;
         fn get_result(self: @TContractState) -> u8;
         fn get_prediction(self: @TContractState, user: ContractAddress) -> u8;
         fn get_total_up_stake(self: @TContractState) -> u256;
@@ -43,14 +45,14 @@ mod PredictTomorrowsEconomy {
     }
 
     #[constructor]
-    fn constructor(ref self: ContractState, oracle_address: ContractAddress) {
-        self.oracle.write(oracle_address);
+    fn constructor(ref self: ContractState, owner_address: ContractAddress) {
+        self.owner.write(owner_address);
         self.result.write(0);
         self.total_up_stake.write(0);
         self.total_down_stake.write(0);
     }
 
-    #[external(v0)]
+    #[abi(embed_v0)]
     impl PredictTomorrowsEconomyImpl of IPredictTomorrowsEconomy<ContractState> {
         fn predict(ref self: ContractState, prediction: u8, amount: u256) {
             let caller = get_caller_address();
@@ -69,19 +71,17 @@ mod PredictTomorrowsEconomy {
             self.emit(Predicted { user: caller, prediction, amount });
         }
 
-        fn determine_result(ref self: ContractState) {
-            assert(get_caller_address() == self.oracle.read(), 'Not the oracle');
+        fn determine_result(ref self: ContractState, result: u8) {
+            assert(get_caller_address() == self.owner.read(), 'Not the owner');
             assert(self.result.read() == 0, 'Result already set');
-
-            let random_number = starknet::get_block_timestamp();
-            let result = if random_number % 2 == 0 { 1 } else { 2 };
+            assert(result == 1 || result == 2, 'Invalid result');
 
             self.result.write(result);
             self.emit(ResultDetermined { result });
         }
 
-        fn get_oracle(self: @ContractState) -> ContractAddress {
-            self.oracle.read()
+        fn get_owner(self: @ContractState) -> ContractAddress {
+            self.owner.read()
         }
 
         fn get_result(self: @ContractState) -> u8 {

@@ -3,8 +3,18 @@
 name = "predict_tomorrows_economy"
 version = "0.1.0"
 
+# See more keys and their definitions at https://docs.swmansion.com/scarb/docs/reference/manifest
+
 [dependencies]
-starknet = ">=2.2.0"
+starknet = ">=2.6.3"
+
+[dev-dependencies]
+
+[lib]
+casm = true
 
 [[target.starknet-contract]]
-casm = true
+
+[scripts]
+
+
