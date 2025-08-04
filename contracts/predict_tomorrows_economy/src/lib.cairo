@@ -3,7 +3,6 @@ mod PredictTomorrowsEconomy {
     use starknet::ContractAddress;
     use starknet::get_caller_address;
     use starknet::storage::Map;
-    use starknet::event::EventEmitter;
 
     #[storage]
     struct Storage {
@@ -68,7 +67,7 @@ mod PredictTomorrowsEconomy {
                 self.total_down_stake.write(self.total_down_stake.read() + amount);
             }
 
-            self.emit(Predicted { user: caller, prediction, amount });
+            self.emit(Event::Predicted(Predicted { user: caller, prediction, amount }));
         }
 
         fn determine_result(ref self: ContractState, result: u8) {
@@ -77,7 +76,7 @@ mod PredictTomorrowsEconomy {
             assert(result == 1 || result == 2, 'Invalid result');
 
             self.result.write(result);
-            self.emit(ResultDetermined { result });
+            self.emit(Event::ResultDetermined(ResultDetermined { result }));
         }
 
         fn get_owner(self: @ContractState) -> ContractAddress {
