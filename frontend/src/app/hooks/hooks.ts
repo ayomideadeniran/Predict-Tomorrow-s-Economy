@@ -9,8 +9,14 @@ import {
 } from "@starknet-react/core";
 
 // Replace with your deployed contract address
+// const contractAddress =
+//   "0x04ddca13e1692e41d085a0d6ea370f43f771e67703130d5b297e6894d75ef06c";
+
+
 const contractAddress =
-  "0x04ddca13e1692e41d085a0d6ea370f43f771e67703130d5b297e6894d75ef06c";
+  "0x05d237823eb1ef8dbddca6109a1c118d1c04be2f22ddaefddfa53af75c14056f";
+
+
 
 // A utility to convert a number to a u256 for Starknet, handling larger numbers
 function toU256(amount: number): { low: string; high: string } {
@@ -22,6 +28,8 @@ function toU256(amount: number): { low: string; high: string } {
     high: `0x${high.toString(16)}`,
   };
 }
+
+
 
 export function useEconomyContract() {
     const { address, status } = useAccount();
@@ -42,6 +50,13 @@ export function useEconomyContract() {
                     { name: "amount_low", type: "felt" },
                     { name: "amount_high", type: "felt" }
                 ],
+                outputs: [],
+                state_mutability: "external"
+            },
+            {
+                type: "function",
+                name: "cancel_prediction",
+                inputs: [],
                 outputs: [],
                 state_mutability: "external"
             },
@@ -84,6 +99,20 @@ export function useEconomyContract() {
                 type: "function",
                 name: "get_prediction",
                 inputs: [{ name: "user", type: "felt" }],
+                outputs: [{ type: "felt" }],
+                state_mutability: "view"
+            },
+            {
+                type: "function",
+                name: "get_participant_count",
+                inputs: [],
+                outputs: [{ type: "felt" }],
+                state_mutability: "view"
+            },
+            {
+                type: "function",
+                name: "get_participant",
+                inputs: [{ name: "index", type: "felt" }],
                 outputs: [{ type: "felt" }],
                 state_mutability: "view"
             }
@@ -131,6 +160,46 @@ export function useEconomyContract() {
         address: contractAddress,
         watch: true,
         enabled: !!contract && !!address,
+    });
+
+    const { data: participantCount, isLoading: isLoadingParticipantCount } = useReadContract({
+        functionName: "get_participant_count",
+        abi: contract?.abi,
+        address: contractAddress,
+        watch: true,
+        enabled: !!contract,
+    });
+
+    const [participants, setParticipants] = useState<string[]>([]);
+
+    useReadContract({
+        functionName: "get_participant_count",
+        abi: contract?.abi,
+        address: contractAddress,
+        watch: true,
+        enabled: !!contract,
+        onSuccess: async (count) => {
+            const numParticipants = Number(BigInt(count as any));
+            const fetchedParticipants: string[] = [];
+            for (let i = 0; i < numParticipants; i++) {
+                try {
+                    const participantAddress = await contract?.get_participant(i);
+                    if (participantAddress) {
+                        fetchedParticipants.push(participantAddress.toString());
+                    }
+                } catch (e) {
+                    console.error(`Error fetching participant at index ${i}:`, e);
+                }
+            }
+            setParticipants(fetchedParticipants);
+        },
+    });
+
+    const { send: cancelPrediction } = useSendTransaction({
+        calls: useMemo(() => {
+            if (!contract) return [];
+            return [contract.populate('cancel_prediction', []) as any];
+        }, [contract]),
     });
 
     const hasPredicted = useMemo(
@@ -188,6 +257,10 @@ export function useEconomyContract() {
         setTimeout(() => sendDetermination(), 0);
     };
 
+    const handleCancel = () => {
+        setTimeout(() => cancelPrediction(), 0);
+    };
+
     // Readable data for UI
     const readableResult =
         isLoadingResult || result === undefined
@@ -221,6 +294,7 @@ export function useEconomyContract() {
         handlePredict,
         handleDetermine,
         readableResult,
-        readablePrediction
+        readablePrediction,
+        handleCancel
     };
 }

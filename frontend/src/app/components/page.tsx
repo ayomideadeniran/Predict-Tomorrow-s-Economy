@@ -25,44 +25,50 @@ export default function Home() {
     handlePredict,
     handleDetermine,
     readableResult,
-    readablePrediction
+    readablePrediction,
+    handleCancel,
+    participants = []
   } = useEconomyContract();
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-black text-white flex flex-col items-center p-0">
-      <Header readableTotalUp={readableTotalUp} readableTotalDown={readableTotalDown} />
-
-      <UserInfo
-        address={address}
-        readablePrediction={readablePrediction}
-        readableResult={readableResult}
-        isPredicting={isPredicting}
-        isDetermining={isDetermining}
-        predictError={predictError}
-        determineError={determineError}
-      />
-
-      {!hasPredicted && (
-        <Prediction
-          hasPredicted={hasPredicted}
-          isPredicting={isPredicting}
-          stakeAmount={stakeAmount}
-          setStakeAmount={setStakeAmount}
-          handlePredict={handlePredict}
-        />
-      )}
-
-      {isOwner && readableResult === "Pending" && (
-        <OwnerControls
-          isDetermining={isDetermining}
-          handleDetermine={handleDetermine}
-        />
-      )}
-
-      {status === "disconnected" && (
+      {status === "disconnected" ? (
         <ConnectWallet />
+      ) : (
+        <>
+          <Header readableTotalUp={readableTotalUp} readableTotalDown={readableTotalDown} />
+
+          <UserInfo
+            address={address}
+            readablePrediction={readablePrediction}
+            readableResult={readableResult}
+            isPredicting={isPredicting}
+            isDetermining={isDetermining}
+            predictError={predictError}
+            determineError={determineError}
+            handleCancel={handleCancel}
+            participants={participants}
+          />
+
+          {!hasPredicted && (
+            <Prediction
+              hasPredicted={hasPredicted}
+              isPredicting={isPredicting}
+              stakeAmount={stakeAmount}
+              setStakeAmount={setStakeAmount}
+              handlePredict={handlePredict}
+            />
+          )}
+
+          {isOwner && readableResult === "Pending" && (
+            <OwnerControls
+              isDetermining={isDetermining}
+              handleDetermine={handleDetermine}
+            />
+          )}
+          <Footer />
+        </>
       )}
-      <Footer />
     </main>
   );
 }
