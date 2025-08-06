@@ -11,7 +11,9 @@ starknet = ">=2.6.3"
 [dev-dependencies]
 
 [lib]
+sierra = true
 casm = true
+name = "predict_tomorrows_economy"
 
 [[target.starknet-contract]]
 

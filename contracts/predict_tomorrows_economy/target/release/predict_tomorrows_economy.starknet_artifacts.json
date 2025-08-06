@@ -1,0 +1,1 @@
+{"version":1,"contracts":[{"id":"qnihevu2l6fu2","package_name":"predict_tomorrows_economy","contract_name":"PredictTomorrowsEconomy","module_path":"predict_tomorrows_economy::PredictTomorrowsEconomy","artifacts":{"sierra":"predict_tomorrows_economy_PredictTomorrowsEconomy.contract_class.json","casm":null}}]}
