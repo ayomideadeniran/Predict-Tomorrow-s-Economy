@@ -88,6 +88,7 @@ mod PredictTomorrowsEconomy {
             self.emit(Event::Predicted(Predicted { user: caller, prediction, amount }));
         }
 
+        
         fn cancel_prediction(ref self: ContractState) {
             let caller = get_caller_address();
             assert(self.result.read() == 0, 'Result already determined');
