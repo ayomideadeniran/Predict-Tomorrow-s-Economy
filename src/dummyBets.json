@@ -1,0 +1,17 @@
+[
+  {
+    "betId": 1,
+    "betUp": true,
+    "description": "Will it rain tomorrow?"
+  },
+  {
+    "betId": 2,
+    "betUp": false,
+    "description": "Will BTC go down today?"
+  },
+  {
+    "betId": 3,
+    "betUp": true,
+    "description": "Will the temperature exceed 30C?"
+  }
+]
