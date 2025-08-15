@@ -114,29 +114,61 @@ function App() {
     }
   }
 
-  async function checkUserAndMarketStatus() {
-    if (!account || betId === null) return;
+  // async function checkUserAndMarketStatus() {
+  //   if (!account || betId === null) return;
 
-    setHasUserBet(false);
-    setIsMarketResolved(false);
+  //   setHasUserBet(false);
+  //   setIsMarketResolved(false);
 
-    try {
-      const calls = [{
-        contractAddress: CONTRACT_ADDRESS,
-        entrypoint: 'place_bet',
-        calldata: [betId, 1] // direction doesn't matter for this check
-      }];
-      await account.simulateTransaction(calls);
-    } catch (e) {
-      const errorString = JSON.stringify(e);
-      if (errorString.includes("Already bet")) {
-        setHasUserBet(true);
-      }
-      if (errorString.includes("Bet closed")) {
-        setIsMarketResolved(true);
-      }
+  //   try {
+  //     const calls = [{
+  //       contractAddress: CONTRACT_ADDRESS,
+  //       entrypoint: 'place_bet',
+  //       calldata: [betId, 1] // direction doesn't matter for this check
+  //     }];
+  //     await account.getSimulateTransaction(calls);
+  //   } catch (e) {
+  //     const errorString = JSON.stringify(e);
+  //     if (errorString.includes("Already bet")) {
+  //       setHasUserBet(true);
+  //     }
+  //     if (errorString.includes("Bet closed")) {
+  //       setIsMarketResolved(true);
+  //     }
+  //   }
+  // }
+
+
+
+async function checkUserAndMarketStatus() {
+  if (!account || betId === null) return;
+
+  setHasUserBet(false);
+  setIsMarketResolved(false);
+
+  try {
+    // Fetch current nonce from account
+    const nonce = await account.getNonce();
+
+    const calls = [{
+      type: "INVOKE" as const,
+      contractAddress: CONTRACT_ADDRESS,
+      entrypoint: "place_bet",
+      calldata: [betId, 1],
+      nonce: nonce, // required
+    }];
+
+    await account.getSimulateTransaction(calls);
+  } catch (e) {
+    const errorString = JSON.stringify(e);
+    if (errorString.includes("Already bet")) {
+      setHasUserBet(true);
+    }
+    if (errorString.includes("Bet closed")) {
+      setIsMarketResolved(true);
     }
   }
+}
 
   useEffect(() => {
     fetchLastBetId();
