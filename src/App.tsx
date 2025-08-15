@@ -13,9 +13,10 @@ function App() {
   const [marketDescription, setMarketDescription] = useState("");
   const [newMarketDescription, setNewMarketDescription] = useState("");
   const [winners, setWinners] = useState<string[]>([]);
-  const [placedBets, setPlacedBets] = useState<{ user: string; up: boolean }[]>(
-    []
-  );
+  const [isMarketResolved, setIsMarketResolved] = useState(false);
+  const [hasUserBet, setHasUserBet] = useState(false);
+  const [placedBets, setPlacedBets] = useState<{ user: string; up: boolean }[]>([]);
+  const [betId, setBetId] = useState<number | null>(null);
 
   const ADMIN_ADDRESS =
     "0x035d4f5BA8c7aEaC79CdD3bd4DA7b84BFB3b66ffFEB7D0544658Ef9516f05466";
@@ -23,57 +24,148 @@ function App() {
   function normalizeAddress(addr?: string) {
     if (!addr) return "";
     let a = addr.toLowerCase();
-    if (a.startsWith("0x")) a = a.slice(2); 
+    if (a.startsWith("0x")) a = a.slice(2);
     a = a.padStart(64, "0");
     return a;
   }
 
   const provider = new RpcProvider({ nodeUrl: STARKNET_RPC });
-const contract = new Contract({
-  abi: CONTRACT_ABI.abi,
-  address: CONTRACT_ADDRESS,
-  providerOrAccount: provider
-});
+  const contract = new Contract({
+    abi: CONTRACT_ABI.abi,
+    address: CONTRACT_ADDRESS,
+    providerOrAccount: provider,
+  });
+
+  async function fetchLastBetId() {
+    console.log("Fetching last bet ID...");
+    try {
+      // Attempt to get the total number of bets, assuming a public var `bet_counter`
+      const betCounter = await contract.call("bet_counter", []);
+      const lastId = Number(betCounter) - 1;
+      if (lastId >= 0) {
+        setBetId(lastId);
+        console.log("Last bet ID is:", lastId);
+        return;
+      }
+    } catch (e) {
+      console.log("Could not fetch bet_counter, falling back to iteration.");
+    }
+
+    // Fallback to iteration
+    let i = 17;
+    let lastBetId = null;
+    console.log("Starting to fetch last bet ID by iteration...");
+    while (i < 18) { // Limit to prevent infinite loops
+      try {
+        await contract.call("get_bet", [i]);
+        lastBetId = i;
+        i++;
+      } catch (e) {
+        break;
+      }
+    }
+    
+    if (lastBetId !== null) {
+      setBetId(lastBetId);
+      console.log("Last bet ID found by iteration:", lastBetId);
+    } else {
+      console.log("No bets found.");
+      setBetId(null);
+    }
+  }
 
   async function fetchMarketDescription() {
+    if (betId === null) return;
+    setLoading(true);
+    setStatus("Fetching market description...");
     try {
-      const res = await contract.call("get_bet", [0]); // Hardcoded to bet ID 0
+      const res = await contract.call("get_bet", [betId]);
       console.log("Response from get_bet:", res);
-      let felt;
-      if (typeof res === "object" && res !== null) {
-        const keys = Object.keys(res);
-        if (keys.length > 0) {
-          felt = (res as Record<string, any>)[keys[0]];
-        } else {
-          throw new Error("get_bet returned an empty object.");
-        }
+      
+      let felts: any[] = [];
+      if (Array.isArray(res)) {
+        felts = res;
+      } else if (typeof res === 'object' && res !== null) {
+        // Handle struct-like objects that are array-like
+        felts = Object.values(res);
       } else {
-        felt = res;
+        felts = [res];
       }
-      const desc = shortString.decodeShortString(felt);
+
+      const desc = felts.map(felt => {
+        try {
+          return shortString.decodeShortString(felt);
+        } catch (e) {
+          console.warn("Could not decode felt:", felt, e);
+          return ""; // Return empty string for parts that fail to decode
+        }
+      }).join('');
+
       setMarketDescription(desc);
+      setStatus("");
     } catch (e) {
       console.error("Failed to fetch market description", e);
       setMarketDescription(
         "Could not fetch market description. Is it created?"
       );
-      setStatus(`Error: ${(e as Error).message}`); // Show the error
+      setStatus(`Error: ${(e as Error).message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function checkUserAndMarketStatus() {
+    if (!account || betId === null) return;
+
+    setHasUserBet(false);
+    setIsMarketResolved(false);
+
+    try {
+      const calls = [{
+        contractAddress: CONTRACT_ADDRESS,
+        entrypoint: 'place_bet',
+        calldata: [betId, 1] // direction doesn't matter for this check
+      }];
+      await account.simulateTransaction(calls);
+    } catch (e) {
+      const errorString = JSON.stringify(e);
+      if (errorString.includes("Already bet")) {
+        setHasUserBet(true);
+      }
+      if (errorString.includes("Bet closed")) {
+        setIsMarketResolved(true);
+      }
     }
   }
 
   useEffect(() => {
-    fetchMarketDescription();
+    fetchLastBetId();
   }, []);
 
   useEffect(() => {
+    if (betId !== null) {
+      fetchMarketDescription();
+      if (account) {
+        checkUserAndMarketStatus();
+      }
+    }
+  }, [betId, account]);
+
+  useEffect(() => {
     if (account) {
+      setLoading(true);
       const isAccountAdmin =
         normalizeAddress(account.address) === normalizeAddress(ADMIN_ADDRESS);
       setIsAdmin(isAccountAdmin);
+      if (betId !== null) {
+        checkUserAndMarketStatus().finally(() => setLoading(false));
+      } else {
+        setLoading(false);
+      }
     } else {
       setIsAdmin(false);
     }
-  }, [account]);
+  }, [account, betId]);
 
   async function handleConnect() {
     setLoading(true);
@@ -111,20 +203,25 @@ const contract = new Contract({
     setSuccess(false);
     try {
       if (!account) throw new Error("Wallet not connected");
-const contractWithAccount = new Contract({
-  abi: CONTRACT_ABI.abi,
-  address: CONTRACT_ADDRESS,
-  providerOrAccount: account
-});
+      
+      // Split the description into chunks of 31 characters
+      // const descParts = newMarketDescription.match(/.{1,31}/g) || [];
 
-      const tx = await contractWithAccount.invoke("add_bet", [
-        newMarketDescription,
-      ]);
+      const descParts = newMarketDescription.match(/.{1,31}/g) || [];
+
+
+      const contractWithAccount = new Contract({
+        abi: CONTRACT_ABI.abi,
+        address: CONTRACT_ADDRESS,
+        providerOrAccount: account,
+      });
+
+const tx = await contractWithAccount.invoke("add_bet", [...descParts]);
       setStatus("Waiting for transaction to be accepted...");
       await provider.waitForTransaction(tx.transaction_hash);
       setStatus("Market description set! Tx: " + tx.transaction_hash);
       setSuccess(true);
-      fetchMarketDescription(); // Refresh the description
+      await fetchLastBetId(); // Refresh the description
     } catch (e) {
       setStatus("Error: " + (e as Error).message);
       setSuccess(false);
@@ -133,23 +230,24 @@ const contractWithAccount = new Contract({
   }
 
   async function handleResolveMarket(isUp: boolean) {
+    if (betId === null) return;
     setLoading(true);
     setStatus("Resolving market...");
     setSuccess(false);
     try {
       if (!account) throw new Error("Wallet not connected");
-const contractWithAccount = new Contract({
-  abi: CONTRACT_ABI.abi,
-  address: CONTRACT_ADDRESS,
-  providerOrAccount: account
-});
+      const contractWithAccount = new Contract({
+        abi: CONTRACT_ABI.abi,
+        address: CONTRACT_ADDRESS,
+        providerOrAccount: account,
+      });
 
-      const betId = 0; // Hardcoded to the main market
       const tx = await contractWithAccount.invoke("resolve_bet", [betId, isUp]);
       setStatus("Waiting for transaction to be accepted...");
       await provider.waitForTransaction(tx.transaction_hash);
       setStatus("Market resolved! Tx: " + tx.transaction_hash);
       setSuccess(true);
+      setIsMarketResolved(true); // Mark the market as resolved
 
       // Fetch betters after resolution
       let betters: string[] = [];
@@ -177,19 +275,26 @@ const contractWithAccount = new Contract({
     setLoading(false);
   }
 
+  function handleResetResolution() {
+    setWinners([]);
+    setIsMarketResolved(false);
+    setStatus("Resolution has been reset.");
+    setSuccess(true);
+  }
+
   async function handlePlaceBet(isBettingUp: boolean) {
+    if (betId === null) return;
     setLoading(true);
     setStatus("Placing bet...");
     setSuccess(false);
     try {
       if (!account) throw new Error("Wallet not connected");
-const contractWithAccount = new Contract({
-  abi: CONTRACT_ABI.abi,
-  address: CONTRACT_ADDRESS,
-  providerOrAccount: account
-});
+      const contractWithAccount = new Contract({
+        abi: CONTRACT_ABI.abi,
+        address: CONTRACT_ADDRESS,
+        providerOrAccount: account,
+      });
 
-      const betId = 0; // Hardcoded to the main market
       const tx = await contractWithAccount.invoke("place_bet", [
         betId,
         isBettingUp,
@@ -208,19 +313,21 @@ const contractWithAccount = new Contract({
   }
 
   async function handleClaimReward() {
+    if (betId === null) return;
     setLoading(true);
     setStatus("Claiming reward...");
     setSuccess(false);
     try {
       if (!account) throw new Error("Wallet not connected");
-const contractWithAccount = new Contract({
-  abi: CONTRACT_ABI.abi,
-  address: CONTRACT_ADDRESS,
-  providerOrAccount: account
-});
+      const contractWithAccount = new Contract({
+        abi: CONTRACT_ABI.abi,
+        address: CONTRACT_ADDRESS,
+        providerOrAccount: account,
+      });
 
-      const betId = 0; // Hardcoded to the main market
       const tx = await contractWithAccount.invoke("claim_reward", [betId]);
+      setStatus("Waiting for transaction to be accepted...");
+      await provider.waitForTransaction(tx.transaction_hash);
       setStatus("Reward claimed! Tx: " + tx.transaction_hash);
       setSuccess(true);
     } catch (e) {
@@ -286,6 +393,8 @@ const contractWithAccount = new Contract({
             disabled={
               !account ||
               loading ||
+              isMarketResolved ||
+              hasUserBet ||
               marketDescription === "Market not yet created."
             }
             style={{
@@ -298,13 +407,15 @@ const contractWithAccount = new Contract({
               cursor: "pointer",
             }}
           >
-            Bet Up
+            {hasUserBet ? "You Already Bet" : "Bet Up"}
           </button>
           <button
             onClick={() => handlePlaceBet(false)}
             disabled={
               !account ||
               loading ||
+              isMarketResolved ||
+              hasUserBet ||
               marketDescription === "Market not yet created."
             }
             style={{
@@ -317,7 +428,7 @@ const contractWithAccount = new Contract({
               cursor: "pointer",
             }}
           >
-            Bet Down
+            {hasUserBet ? "You Already Bet" : "Bet Down"}
           </button>
         </div>
       </div>
@@ -332,19 +443,25 @@ const contractWithAccount = new Contract({
               marginBottom: 24,
             }}
           >
-            <h2>Set Market Description (Admin)</h2>
+            <h2>Set Prediction (Admin)</h2>
             <input
               value={newMarketDescription}
               onChange={(e) => setNewMarketDescription(e.target.value)}
-              placeholder="New market description"
+              placeholder="New Prediction (max 31 chars)"
+              maxLength={31}
               style={{ marginRight: 8, padding: 4, width: "70%" }}
             />
             <button
               onClick={handleSetMarketDescription}
-              disabled={!account || loading}
+              disabled={!account || loading || newMarketDescription.length > 31}
             >
-              Set Description
+              Set Prediction
             </button>
+            {newMarketDescription.length > 31 && (
+              <div style={{ color: "red", marginTop: "8px" }}>
+                Description cannot exceed 31 characters.
+              </div>
+            )}
           </div>
 
           <div
@@ -355,7 +472,7 @@ const contractWithAccount = new Contract({
               marginBottom: 24,
             }}
           >
-            <h2>Resolve Market (Admin)</h2>
+            <h2>Resolve Prediction (Admin)</h2>
             <div
               style={{
                 display: "flex",
@@ -395,6 +512,14 @@ const contractWithAccount = new Contract({
                 Resolve Down
               </button>
             </div>
+            <div style={{ display: "flex", justifyContent: "center", marginTop: "1rem" }}>
+              <button
+                onClick={handleResetResolution}
+                disabled={!account || loading}
+              >
+                Reset Resolution
+              </button>
+            </div>
           </div>
         </>
       )}
@@ -408,9 +533,11 @@ const contractWithAccount = new Contract({
         }}
       >
         <h2>Claim Reward</h2>
-        <p>Did you win the bet on the main market? Claim your reward here.</p>
+        <p>
+          Did you win the bet on the main Prediction? Claim your reward here.
+        </p>
         <button onClick={handleClaimReward} disabled={!account || loading}>
-          Claim Reward for Main Market
+          Claim Reward for Main Prediction
         </button>
       </div>
 
