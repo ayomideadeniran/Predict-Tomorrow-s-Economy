@@ -175,6 +175,8 @@ function App() {
     }
   }
 
+
+
   useEffect(() => {
     fetchLastBetId();
   }, []);
@@ -567,7 +569,7 @@ function App() {
           textAlign: "center",
         }}
       >
-        <h2>{marketDescription}</h2>
+        <h2>{marketDescription}?</h2>
         <div
           style={{
             display: "flex",
@@ -622,6 +624,21 @@ function App() {
           )}
         </div>
       </div>
+
+      {account && !isAdmin && (
+        <div
+          style={{
+            background: "#222",
+            borderRadius: 8,
+            padding: 16,
+            marginBottom: 24,
+            textAlign: "center",
+            color: "#ff9800"
+          }}
+        >
+          <p>You are not an admin. You cannot add bets or resolve bets.</p>
+        </div>
+      )}
 
       {isAdmin && (
         <>
