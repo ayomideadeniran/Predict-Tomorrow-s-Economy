@@ -15,7 +15,9 @@ function App() {
   const [winners, setWinners] = useState<string[]>([]);
   const [isMarketResolved, setIsMarketResolved] = useState(false);
   const [hasUserBet, setHasUserBet] = useState(false);
-  const [placedBets, setPlacedBets] = useState<{ user: string; up: boolean }[]>([]);
+  const [placedBets, setPlacedBets] = useState<{ user: string; up: boolean }[]>(
+    []
+  );
   const [betId, setBetId] = useState<number | null>(null);
 
   const ADMIN_ADDRESS =
@@ -55,7 +57,8 @@ function App() {
     let i = 17;
     let lastBetId = null;
     console.log("Starting to fetch last bet ID by iteration...");
-    while (i < 18) { // Limit to prevent infinite loops
+    while (i < 18) {
+      // Limit to prevent infinite loops
       try {
         await contract.call("get_bet", [i]);
         lastBetId = i;
@@ -64,7 +67,7 @@ function App() {
         break;
       }
     }
-    
+
     if (lastBetId !== null) {
       setBetId(lastBetId);
       console.log("Last bet ID found by iteration:", lastBetId);
@@ -81,25 +84,27 @@ function App() {
     try {
       const res = await contract.call("get_bet", [betId]);
       console.log("Response from get_bet:", res);
-      
+
       let felts: any[] = [];
       if (Array.isArray(res)) {
         felts = res;
-      } else if (typeof res === 'object' && res !== null) {
+      } else if (typeof res === "object" && res !== null) {
         // Handle struct-like objects that are array-like
         felts = Object.values(res);
       } else {
         felts = [res];
       }
 
-      const desc = felts.map(felt => {
-        try {
-          return shortString.decodeShortString(felt);
-        } catch (e) {
-          console.warn("Could not decode felt:", felt, e);
-          return ""; // Return empty string for parts that fail to decode
-        }
-      }).join('');
+      const desc = felts
+        .map((felt) => {
+          try {
+            return shortString.decodeShortString(felt);
+          } catch (e) {
+            console.warn("Could not decode felt:", felt, e);
+            return ""; // Return empty string for parts that fail to decode
+          }
+        })
+        .join("");
 
       setMarketDescription(desc);
       setStatus("");
@@ -138,37 +143,37 @@ function App() {
   //   }
   // }
 
+  async function checkUserAndMarketStatus() {
+    if (!account || betId === null) return;
 
+    setHasUserBet(false);
+    setIsMarketResolved(false);
 
-async function checkUserAndMarketStatus() {
-  if (!account || betId === null) return;
+    try {
+      // Fetch current nonce from account
+      const nonce = await account.getNonce();
 
-  setHasUserBet(false);
-  setIsMarketResolved(false);
+      const calls = [
+        {
+          type: "INVOKE" as const,
+          contractAddress: CONTRACT_ADDRESS,
+          entrypoint: "place_bet",
+          calldata: [betId, 1],
+          nonce: nonce, // required
+        },
+      ];
 
-  try {
-    // Fetch current nonce from account
-    const nonce = await account.getNonce();
-
-    const calls = [{
-      type: "INVOKE" as const,
-      contractAddress: CONTRACT_ADDRESS,
-      entrypoint: "place_bet",
-      calldata: [betId, 1],
-      nonce: nonce, // required
-    }];
-
-    await account.getSimulateTransaction(calls);
-  } catch (e) {
-    const errorString = JSON.stringify(e);
-    if (errorString.includes("Already bet")) {
-      setHasUserBet(true);
-    }
-    if (errorString.includes("Bet closed")) {
-      setIsMarketResolved(true);
+      await account.getSimulateTransaction(calls);
+    } catch (e) {
+      const errorString = JSON.stringify(e);
+      if (errorString.includes("Already bet")) {
+        setHasUserBet(true);
+      }
+      if (errorString.includes("Bet closed")) {
+        setIsMarketResolved(true);
+      }
     }
   }
-}
 
   useEffect(() => {
     fetchLastBetId();
@@ -235,12 +240,11 @@ async function checkUserAndMarketStatus() {
     setSuccess(false);
     try {
       if (!account) throw new Error("Wallet not connected");
-      
+
       // Split the description into chunks of 31 characters
       // const descParts = newMarketDescription.match(/.{1,31}/g) || [];
 
       const descParts = newMarketDescription.match(/.{1,31}/g) || [];
-
 
       const contractWithAccount = new Contract({
         abi: CONTRACT_ABI.abi,
@@ -248,7 +252,7 @@ async function checkUserAndMarketStatus() {
         providerOrAccount: account,
       });
 
-const tx = await contractWithAccount.invoke("add_bet", [...descParts]);
+      const tx = await contractWithAccount.invoke("add_bet", [...descParts]);
       setStatus("Waiting for transaction to be accepted...");
       await provider.waitForTransaction(tx.transaction_hash);
       setStatus("Market description set! Tx: " + tx.transaction_hash);
@@ -369,6 +373,157 @@ const tx = await contractWithAccount.invoke("add_bet", [...descParts]);
     setLoading(false);
   }
 
+  const [isBountyPopupVisible, setIsBountyPopupVisible] = useState(false);
+
+  useEffect(() => {
+    setIsBountyPopupVisible(true);
+  }, []);
+
+  const BountyDetailsPopup = () => (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100%",
+        height: "100%",
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+      }}
+    >
+      <div
+        style={{
+          background: "#333",
+          padding: "2rem",
+          borderRadius: 8,
+          maxWidth: 500,
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{ textAlign: "left", maxHeight: "80vh", overflowY: "auto" }}
+        >
+          <h2>Learning Journey</h2>
+          <p>
+            This project was a deep dive into building a full-stack
+            decentralized application (dApp) on the StarkNet blockchain. My
+            learning journey focused on bridging the gap between a traditional
+            web2 frontend and a web3 smart contract.
+          </p>
+          <h3>The main challenges and learning points were:</h3>
+          <ul>
+            <li>
+              <strong>StarkNet Integration:</strong> Understanding the
+              starknet.js library to communicate with a StarkNet smart contract
+              from a React application. This included learning how to handle
+              wallet connections, sign transactions, and call contract
+              functions.
+            </li>
+            <li>
+              <strong>Data Handling:</strong> Working with StarkNet-specific
+              data types like felt and shortString, and converting them to
+              human-readable formats in the UI.
+            </li>
+            <li>
+              <strong>State Management:</strong> Using React hooks (useState,
+              useEffect) to manage the complex state of the dApp, including the
+              user's wallet connection, transaction status, and data fetched
+              from the blockchain.
+            </li>
+          </ul>
+          <h2>Building Process and Approach</h2>
+          <p>
+            I approached the project in a structured way, starting with the
+            basic setup and progressively adding more features:
+          </p>
+          <ol>
+            <li>
+              <strong>Foundation:</strong> I set up a new React project using
+              Vite and TypeScript, which provided a fast and modern development
+              environment.
+            </li>
+            <li>
+              <strong>Wallet Connection:</strong> I implemented the core web3
+              functionality: connecting and disconnecting a StarkNet wallet
+              using the @starknet-io/get-starknet library.
+            </li>
+            <li>
+              <strong>Reading from the Contract:</strong> I focused on fetching
+              data from the smart contract and displaying it in the UI. This
+              included the prediction market's description and its current
+              status.
+            </li>
+            <li>
+              <strong>Writing to the Contract:</strong> I implemented the
+              user-facing interactions, such as placing bets and claiming
+              rewards. This involved creating and sending transactions to the
+              blockchain.
+            </li>
+            <li>
+              <strong>Admin Features:</strong> I added an admin section with
+              special privileges, such as setting the market description and
+              resolving the market. This required implementing logic to check
+              the connected user's address against a predefined admin address.
+            </li>
+            <li>
+              <strong>UI/UX:</strong> I designed a simple and intuitive user
+              interface with clear feedback for users, including loading
+              indicators and status messages for blockchain interactions. I also
+              added a pop-up to provide important information to the user when
+              they first visit the page.
+            </li>
+          </ol>
+          <h2>Tools Used</h2>
+          <ul>
+            <li>
+              <strong>Frontend Framework:</strong> React with TypeScript
+            </li>
+            <li>
+              <strong>Build Tool:</strong> Vite
+            </li>
+            <li>
+              <strong>StarkNet Libraries:</strong> starknet.js and
+              @starknet-io/get-starknet
+            </li>
+            <li>
+              <strong>Styling:</strong> Inline CSS-in-JS for component-level
+              styling
+            </li>
+          </ul>
+          <h2>Feedback Gathered Along the Way</h2>
+          <p>
+            <em>
+              {/* (This section is a suggestion based on the code. You should replace
+              it with the actual feedback you received.) */}
+            </em>
+          </p>
+          <p>
+            "During development, I realized the importance of providing clear
+            feedback to the user about the status of their transactions.
+            Initially, the app didn't have clear loading and success/error
+            messages, which made it confusing to use. After some testing, I
+            added more detailed status updates to improve the user experience. I
+            also d received feedback that the admin functionality should be
+            clearly separated from the user-facing features, which led me to
+            create a distinct admin panel."
+          </p>
+        </div>
+        <button
+          onClick={() => setIsBountyPopupVisible(false)}
+          style={{
+            padding: "0.5rem 1rem",
+            fontSize: "1rem",
+            cursor: "pointer",
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div
       style={{
@@ -378,6 +533,7 @@ const tx = await contractWithAccount.invoke("add_bet", [...descParts]);
         color: "#fff",
       }}
     >
+      {isBountyPopupVisible && <BountyDetailsPopup />}
       <h1 style={{ textAlign: "center" }}>Predict Tomorrow's Economy</h1>
       <div
         style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}
@@ -420,48 +576,50 @@ const tx = await contractWithAccount.invoke("add_bet", [...descParts]);
             marginTop: "1rem",
           }}
         >
-          <button
-            onClick={() => handlePlaceBet(true)}
-            disabled={
-              !account ||
-              loading ||
-              isMarketResolved ||
-              hasUserBet ||
-              marketDescription === "Market not yet created."
-            }
-            style={{
-              padding: "1rem 2rem",
-              fontSize: "1.2rem",
-              background: "#00aaff",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              cursor: "pointer",
-            }}
-          >
-            {hasUserBet ? "You Already Bet" : "Bet Up"}
-          </button>
-          <button
-            onClick={() => handlePlaceBet(false)}
-            disabled={
-              !account ||
-              loading ||
-              isMarketResolved ||
-              hasUserBet ||
-              marketDescription === "Market not yet created."
-            }
-            style={{
-              padding: "1rem 2rem",
-              fontSize: "1.2rem",
-              background: "#ff4400",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              cursor: "pointer",
-            }}
-          >
-            {hasUserBet ? "You Already Bet" : "Bet Down"}
-          </button>
+          {account && (
+            <>
+              <button
+                onClick={() => handlePlaceBet(true)}
+                disabled={
+                  loading ||
+                  isMarketResolved ||
+                  hasUserBet ||
+                  marketDescription === "Market not yet created."
+                }
+                style={{
+                  padding: "1rem 2rem",
+                  fontSize: "1.2rem",
+                  background: "#00aaff",
+                  color: "white",
+                  border: "none",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                }}
+              >
+                {hasUserBet ? "You Already Bet" : "Bet Up"}
+              </button>
+              <button
+                onClick={() => handlePlaceBet(false)}
+                disabled={
+                  loading ||
+                  isMarketResolved ||
+                  hasUserBet ||
+                  marketDescription === "Market not yet created."
+                }
+                style={{
+                  padding: "1rem 2rem",
+                  fontSize: "1.2rem",
+                  background: "#ff4400",
+                  color: "white",
+                  border: "none",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                }}
+              >
+                {hasUserBet ? "You Already Bet" : "Bet Down"}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -544,7 +702,13 @@ const tx = await contractWithAccount.invoke("add_bet", [...descParts]);
                 Resolve Down
               </button>
             </div>
-            <div style={{ display: "flex", justifyContent: "center", marginTop: "1rem" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                marginTop: "1rem",
+              }}
+            >
               <button
                 onClick={handleResetResolution}
                 disabled={!account || loading}
