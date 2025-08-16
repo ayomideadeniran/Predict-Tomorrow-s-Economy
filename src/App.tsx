@@ -732,8 +732,13 @@ function App() {
         <p>
           Did you win the bet on the main Prediction? Claim your reward here.
         </p>
-        <button onClick={handleClaimReward} disabled={!account || loading}>
-          Claim Reward for Main Prediction
+        <button
+          onClick={handleClaimReward}
+          disabled={!account || loading || !isMarketResolved}
+        >
+          {isMarketResolved
+            ? "Claim Reward for Main Prediction"
+            : "Market not resolved yet"}
         </button>
       </div>
 
